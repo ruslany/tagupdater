@@ -1,4 +1,5 @@
-using Microsoft.AspNetCore.Authentication.OpenIdConnect;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Authorization;
 using Microsoft.Identity.Web;
 using Microsoft.Identity.Web.UI;
 using TagUpdater.Web.Services;
@@ -9,25 +10,32 @@ var builder = WebApplication.CreateBuilder(args);
 var configuration = builder.Configuration;
 var services = builder.Services;
 
-// Add authentication services
-services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
-    .AddMicrosoftIdentityWebApp(configuration.GetSection("AzureAd"))
+builder.Services.AddMicrosoftIdentityWebAppAuthentication(builder.Configuration, "AzureAd")
     .EnableTokenAcquisitionToCallDownstreamApi()
-    .AddDistributedTokenCaches();
+    .AddInMemoryTokenCaches();
 
-// Add required Azure API scopes
-services.AddMicrosoftIdentityWebApiAuthentication(configuration, "AzureAd")
-    .EnableTokenAcquisitionToCallDownstreamApi();
+// Add authentication services
+//services.AddAuthentication(OpenIdConnectDefaults.AuthenticationScheme)
+//    .AddMicrosoftIdentityWebApp(configuration.GetSection("AzureAd"))
+//    .EnableTokenAcquisitionToCallDownstreamApi()
+//    .AddDistributedTokenCaches();
 
 // Add Azure specific services
 services.AddScoped<ResourceManagerService>();
 
 // Add MVC services
-services.AddControllersWithViews()
-    .AddMicrosoftIdentityUI();
+services.AddControllersWithViews(options =>
+{
+    // This ensures unauthorized requests redirect to login
+    var policy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+    options.Filters.Add(new AuthorizeFilter(policy));
+})
+.AddMicrosoftIdentityUI();
 
 // Add Razor Pages
-services.AddRazorPages();
+// services.AddRazorPages();
 
 var app = builder.Build();
 
