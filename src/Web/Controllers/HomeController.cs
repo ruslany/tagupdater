@@ -1,21 +1,28 @@
 using System.Diagnostics;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Identity.Web;
 using TagUpdater.Web.Models;
 using TagUpdater.Web.Services;
 
 namespace TagUpdater.Web.Controllers;
 
-// Controllers
 [Authorize]
-public class HomeController(ResourceManagerService resourceManagerService) : Controller
+public class HomeController : Controller
 {
-    private readonly ResourceManagerService _resourceManagerService = resourceManagerService;
-
+    private readonly ResourceManagerService _resourceManagerService;
+    private readonly ITokenAcquisition _tokenAcquisition;
+    
+    public HomeController(ResourceManagerService resourceManagerService, ITokenAcquisition tokenAcquisition)
+    {
+        _resourceManagerService = resourceManagerService;
+        _tokenAcquisition = tokenAcquisition;
+    }
+    
     public IActionResult Index()
     {
-        return View(new ResourceTagUpdateModel(){ 
-            ResourceId = "/subscriptions/{subscriptionId}/resourceGroups/{resourceGroup}/providers/{provider}/{resourceType}/{resourceName}",
+        return View(new ResourceTagUpdateModel(){
+            ResourceId = "resourceId",
             TagsInput = ""
         });
     }
@@ -37,29 +44,54 @@ public class HomeController(ResourceManagerService resourceManagerService) : Con
             return View(model);
         }
         
-        var success = await _resourceManagerService.UpdateResourceTagsAsync(model.ResourceId, tags);
-        
-        if (success)
+        try
         {
-            ViewBag.SuccessMessage = "Resource tags updated successfully!";
+            var success = await _resourceManagerService.UpdateResourceTagsAsync(model.ResourceId, tags);
+            
+            if (success)
+            {
+                ViewBag.SuccessMessage = "Resource tags updated successfully!";
+            }
+            else
+            {
+                ViewBag.ErrorMessage = "Failed to update resource tags. Please check the resource ID and your permissions.";
+            }
         }
-        else
+        catch (MicrosoftIdentityWebChallengeUserException ex)
         {
-            ViewBag.ErrorMessage = "Failed to update resource tags. Please check the resource ID and your permissions.";
+            // Handle consent challenge
+            return Challenge();
+        }
+        catch (Exception ex)
+        {
+            ViewBag.ErrorMessage = $"Error: {ex.Message}";
         }
         
         return View(model);
     }
     
-    public IActionResult Privacy()
+    [AllowAnonymous]
+    public IActionResult ConsentRequired()
     {
         return View();
     }
     
     [AllowAnonymous]
-    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
-    public IActionResult Error()
+    public IActionResult RequestConsent()
     {
-        return View(new ErrorViewModel { RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier });
+        // Trigger a consent request by challenging the user
+        return Challenge();
+    }
+    
+    [AllowAnonymous]
+    [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
+    public IActionResult Error(string message)
+    {
+        var model = new ErrorViewModel 
+        { 
+            RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier,
+            ErrorMessage = message
+        };
+        return View(model);
     }
 }

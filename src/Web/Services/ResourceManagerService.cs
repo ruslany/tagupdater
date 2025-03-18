@@ -1,25 +1,39 @@
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.Azure.Management.ResourceManager;
 using Microsoft.Identity.Web;
 using Microsoft.Rest;
 
 namespace TagUpdater.Web.Services;
 
-public class ResourceManagerService
+public class ResourceManagerService(ITokenAcquisition tokenAcquisition, IHttpContextAccessor httpContextAccessor)
 {
-    private readonly ITokenAcquisition _tokenAcquisition;
-
-    public ResourceManagerService(ITokenAcquisition tokenAcquisition)
-    {
-        _tokenAcquisition = tokenAcquisition;
-    }
+    private readonly ITokenAcquisition _tokenAcquisition = tokenAcquisition;
+    private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
 
     public async Task<bool> UpdateResourceTagsAsync(string resourceId, Dictionary<string, string> tags)
     {
         try
         {
             // Get token for Azure Resource Manager
-            var accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(
-                new[] { "https://management.azure.com/user_impersonation" });
+            string[] scopes = new[] { "https://management.azure.com/user_impersonation" };
+            
+            string accessToken;
+            try 
+            {
+                accessToken = await _tokenAcquisition.GetAccessTokenForUserAsync(scopes, authenticationScheme: OpenIdConnectDefaults.AuthenticationScheme);
+            }
+            catch (MicrosoftIdentityWebChallengeUserException ex)
+            {
+                // Handle consent required exception
+                Console.WriteLine($"Consent required: {ex.Message}");
+                _httpContextAccessor.HttpContext.Response.Redirect("/Home/ConsentRequired");
+                return false;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Token acquisition error: {ex.Message}");
+                throw;
+            }
 
             // Parse resource ID to extract subscription, resource group, and resource information
             var parts = resourceId.Split('/');
@@ -73,8 +87,9 @@ public class ResourceManagerService
 
             return true;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            Console.WriteLine($"Error updating tags: {ex.Message}");
             return false;
         }
     }
