@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Identity.Web;
@@ -21,8 +23,9 @@ public class HomeController : Controller
     
     public IActionResult Index()
     {
-        return View(new ResourceTagUpdateModel(){
-            ResourceId = "resourceId",
+        return View(new ResourceTagUpdateModel()
+        {
+            ResourceId = "resourceid",
             TagsInput = ""
         });
     }
@@ -60,7 +63,7 @@ public class HomeController : Controller
         catch (MicrosoftIdentityWebChallengeUserException ex)
         {
             // Handle consent challenge
-            return Challenge();
+            return RedirectToAction("ConsentRequired");
         }
         catch (Exception ex)
         {
@@ -79,8 +82,16 @@ public class HomeController : Controller
     [AllowAnonymous]
     public IActionResult RequestConsent()
     {
-        // Trigger a consent request by challenging the user
-        return Challenge();
+        // Store the redirect URL in TempData so we can access it after authentication
+        TempData["RedirectToHome"] = true;
+        
+        // Specify authentication properties to redirect to home page after consent
+        var props = new AuthenticationProperties { 
+            RedirectUri = Url.Action("Index", "Home") 
+        };
+        
+        // Challenge the user with specific properties
+        return Challenge(props, OpenIdConnectDefaults.AuthenticationScheme);
     }
     
     [AllowAnonymous]

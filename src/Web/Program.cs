@@ -19,12 +19,10 @@ services.AddAuthentication(options =>
     options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = OpenIdConnectDefaults.AuthenticationScheme;
 })
+
 .AddMicrosoftIdentityWebApp(options =>
 {
     configuration.GetSection("AzureAd").Bind(options);
-    
-    // Configure to request consent - this is crucial
-    options.Prompt = "consent";
     
     // Add the Azure management scope directly in the OpenIdConnect configuration
     options.Scope.Add("https://management.azure.com/user_impersonation");
@@ -33,8 +31,12 @@ services.AddAuthentication(options =>
     {
         OnRedirectToIdentityProvider = context =>
         {
-            // Always request consent
-            context.ProtocolMessage.Prompt = "consent";
+            // Check if we're requesting consent explicitly
+            if (context.Properties.Items.ContainsKey(OpenIdConnectDefaults.RedirectUriForCodePropertiesKey))
+            {
+                // Add prompt=consent only when explicitly requested
+                context.ProtocolMessage.Prompt = "consent";
+            }
             return Task.CompletedTask;
         },
         OnAuthenticationFailed = context =>
@@ -44,7 +46,7 @@ services.AddAuthentication(options =>
             context.HandleResponse();
             return Task.CompletedTask;
         },
-        // Handle token validation errors - such as consent required
+        // Handle token validation errors
         OnRemoteFailure = context =>
         {
             Console.WriteLine($"Remote authentication failure: {context.Failure?.Message}");
@@ -58,6 +60,18 @@ services.AddAuthentication(options =>
                 context.HandleResponse();
             }
             
+            return Task.CompletedTask;
+        },
+        // This is the important part - handle post-authentication redirect
+        OnTokenValidated = context =>
+        {
+            // If we have a redirect stored, use it
+            if (context.Properties.RedirectUri != null && 
+                !context.Properties.RedirectUri.EndsWith("/signin-oidc"))
+            {
+                // Keep the redirect URI
+                Console.WriteLine($"Will redirect to: {context.Properties.RedirectUri}");
+            }
             return Task.CompletedTask;
         }
     };

@@ -5,10 +5,14 @@ using Microsoft.Rest;
 
 namespace TagUpdater.Web.Services;
 
-public class ResourceManagerService(ITokenAcquisition tokenAcquisition, IHttpContextAccessor httpContextAccessor)
+public class ResourceManagerService
 {
-    private readonly ITokenAcquisition _tokenAcquisition = tokenAcquisition;
-    private readonly IHttpContextAccessor _httpContextAccessor = httpContextAccessor;
+    private readonly ITokenAcquisition _tokenAcquisition;
+
+    public ResourceManagerService(ITokenAcquisition tokenAcquisition)
+    {
+        _tokenAcquisition = tokenAcquisition;
+    }
 
     public async Task<bool> UpdateResourceTagsAsync(string resourceId, Dictionary<string, string> tags)
     {
@@ -26,8 +30,7 @@ public class ResourceManagerService(ITokenAcquisition tokenAcquisition, IHttpCon
             {
                 // Handle consent required exception
                 Console.WriteLine($"Consent required: {ex.Message}");
-                _httpContextAccessor.HttpContext.Response.Redirect("/Home/ConsentRequired");
-                return false;
+                throw; // Let the controller handle the redirect
             }
             catch (Exception ex)
             {
@@ -90,7 +93,7 @@ public class ResourceManagerService(ITokenAcquisition tokenAcquisition, IHttpCon
         catch (Exception ex)
         {
             Console.WriteLine($"Error updating tags: {ex.Message}");
-            return false;
+            throw; // Let the controller handle the error
         }
     }
 }
